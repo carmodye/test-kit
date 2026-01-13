@@ -8,6 +8,7 @@ use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Jeffgreco13\FilamentBreezy\Traits\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser, MustVerifyEmail
@@ -18,6 +19,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
     use HasPanelShield;
     use HasRoles;
     use Notifiable;
+    use TwoFactorAuthenticatable;
 
     protected $hidden = [
         'password',

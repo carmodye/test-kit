@@ -55,7 +55,8 @@ class AdminPanelProvider extends PanelProvider
                 FilamentNordThemePlugin::make(),
                 FilamentBackgroundsPlugin::make(),
                 BreezyCore::make()
-                    ->myProfile(),
+                    ->myProfile()
+                    ->enableTwoFactorAuthentication(),
             ])
             ->middleware([
                 EncryptCookies::class,
