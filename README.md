@@ -43,17 +43,19 @@ By default, this starter kit uses **SQLite**. If you’re okay with this, you ca
 
 2️⃣ Create Filament Admin User
 ```bash
-php artisan make:filament-user
-```
+sail php artisan make:filament-user
+
+create admin and abAdmin```
 
 3️⃣ Assign Super Admin Role
 ```bash
-php artisan shield:super-admin --user=1 --panel=admin
+sail php artisan shield:super-admin --user=1 --panel=admin
 ```
+do same for abAdmin 
 
 4️⃣ Generate Permissions
 ```bash
-php artisan shield:generate --all --ignore-existing-policies --panel=admin
+sail php artisan shield:generate --all --ignore-existing-policies --panel=admin
 ```
 
 ## 🌟Panel Include 

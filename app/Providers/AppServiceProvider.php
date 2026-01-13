@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use App\Policies\ActivityPolicy;
 use BezhanSalleh\FilamentShield\Facades\FilamentShield;
 use Filament\Tables\Columns\Column;
@@ -32,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
         $this->configureModels();
 
         $this->configureFilament();
+
+        User::created(function ($user) {
+            $user->sendEmailVerificationNotification();
+        });
     }
 
     private function configurePolicies(): void
@@ -55,15 +60,16 @@ class AppServiceProvider extends ServiceProvider
 
     private function configureFilament(): void
     {
-        FilamentShield::prohibitDestructiveCommands($this->app->isProduction());
+        FilamentShield::prohibitDestructiveCommands($this->app->environment('production'));
 
         Column::configureUsing(fn(Column $column) => $column->toggleable());
 
-        Table::configureUsing(fn (Table $table) => $table
-            ->reorderableColumns()
-            ->deferColumnManager(false)
-            ->deferFilters(false)
-            ->paginationPageOptions([10, 25, 50])
+        Table::configureUsing(
+            fn(Table $table) => $table
+                ->reorderableColumns()
+                ->deferColumnManager(false)
+                ->deferFilters(false)
+                ->paginationPageOptions([10, 25, 50])
         );
     }
 }
