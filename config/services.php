@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'api' => [
+        'url' => env('POP_API_URL'),
+    ],
+
 ];
