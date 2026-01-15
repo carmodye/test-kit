@@ -22,6 +22,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Jeffgreco13\FilamentBreezy\BreezyCore;
 use Swis\Filament\Backgrounds\FilamentBackgroundsPlugin;
+use Jacobtims\FilamentLogger\FilamentLoggerPlugin;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -41,9 +42,8 @@ class AdminPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([
                 Dashboard::class,
-            ])
-            ->resources([
-                config('filament-logger.activity_resource'),
+                \App\Filament\Pages\ViewDevices::class,
+                \App\Filament\Pages\ViewSlides::class,
             ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
@@ -54,6 +54,7 @@ class AdminPanelProvider extends PanelProvider
                 FilamentShieldPlugin::make(),
                 FilamentNordThemePlugin::make(),
                 FilamentBackgroundsPlugin::make(),
+                FilamentLoggerPlugin::make(),
                 BreezyCore::make()
                     ->myProfile()
                     ->enableTwoFactorAuthentication(),

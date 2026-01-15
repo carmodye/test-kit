@@ -20,7 +20,7 @@
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "swisnl/filament-backgrounds": "^2.0",
-        "unknow-sk/filament-logger": "^1.0"
+        "jacobtims/filament-logger": "^1.0"
     },
     "require-dev": {
         "barryvdh/laravel-debugbar": "^3.15",

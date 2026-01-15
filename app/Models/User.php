@@ -30,4 +30,22 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'role', // Add role to fillable if needed
+    ];
+
+    public function clients()
+    {
+        return $this->belongsToMany(Client::class, 'user_client')->withTimestamps();
+    }
+
+    public function sendPasswordResetNotification($token)
+    {
+        \Log::info('Sending password reset notification to: ' . $this->email);
+        parent::sendPasswordResetNotification($token);
+    }
 }

@@ -8,6 +8,7 @@ use BezhanSalleh\FilamentShield\Facades\FilamentShield;
 use Filament\Tables\Columns\Column;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -27,6 +28,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configurePolicies();
+
+        ResetPassword::createUrlUsing(function ($notifiable, $token) {
+            return url('/admin/reset-password/' . $token);
+        });
 
         $this->configureDB();
 
