@@ -30,11 +30,11 @@ class AdminPanelProvider extends PanelProvider
     {
         return $panel
             ->default()
-            ->id('admin')
-            ->path('admin')
+            ->id('pop')
+            ->path('pop')
             ->brandLogo('/ABLogo.png')
             ->darkModeBrandLogo('/ABLogo-dark.png')
-            ->homeUrl('/')
+            ->homeUrl('/pop')
             ->login()
             ->emailVerification()
             ->passwordReset()
