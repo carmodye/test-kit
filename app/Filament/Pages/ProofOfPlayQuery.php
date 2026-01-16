@@ -15,9 +15,9 @@ use App\Models\Client;
 use App\Enums\ProofOfPlayMode;
 use App\Models\Device;
 use App\Models\Slide;
+use Filament\Support\ArrayRecord;
 use Filament\Actions\Action;
 use BackedEnum;
-use Filament\Schemas\Schema;
 
 class ProofOfPlayQuery extends Page implements HasTable
 {
@@ -31,9 +31,14 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     public $tableQuery = null;
 
+    public $currentMode = null;
+
+    public $lastQuery = null;
+
     public function mount(): void
     {
-        // No form to fill - form is in action modal
+        ArrayRecord::keyName('key');
+        $this->currentMode = ProofOfPlayMode::SitesBySlide->value;
     }
 
     public function getTitle(): string
@@ -48,19 +53,11 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     public function table(Table $table): Table
     {
+        ArrayRecord::keyName('key');
+
         return $table
             ->query(Client::query()->whereRaw('1 = 0')) // Dummy query to satisfy Filament
-            ->columns([
-                Tables\Columns\TextColumn::make('site_name')
-                    ->label('Site Name'),
-                Tables\Columns\TextColumn::make('slide_name')
-                    ->label('Slide Name'),
-                Tables\Columns\TextColumn::make('played_at')
-                    ->label('Played At')
-                    ->dateTime(),
-                Tables\Columns\TextColumn::make('duration')
-                    ->label('Duration'),
-            ])
+            ->columns($this->getTableColumns())
             ->emptyStateHeading('No results')
             ->emptyStateDescription('Run a query to see proof of play data.')
             ->paginated([10, 25, 50])
@@ -69,9 +66,51 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     public function getTableRecords(): \Illuminate\Support\Collection|\Illuminate\Contracts\Pagination\Paginator|\Illuminate\Contracts\Pagination\CursorPaginator
     {
-        return $this->getTableQuery();
+        return $this->tableQuery ?? collect();
     }
 
+    protected function getTableColumns(): array
+    {
+        if ($this->currentMode === ProofOfPlayMode::SlidesBySite->value) {
+            return [
+                Tables\Columns\TextColumn::make('slide_id')
+                    ->label('Slide ID'),
+                Tables\Columns\TextColumn::make('slide_name')
+                    ->label('Slide Name'),
+                Tables\Columns\TextColumn::make('duration_seconds')
+                    ->label('Duration (seconds)'),
+                Tables\Columns\TextColumn::make('play_count')
+                    ->label('Play Count'),
+            ];
+        }
+
+        if ($this->currentMode === ProofOfPlayMode::SitesBySlide->value) {
+            return [
+                Tables\Columns\TextColumn::make('device_id')
+                    ->label('Device ID'),
+                Tables\Columns\TextColumn::make('display_id')
+                    ->label('Display ID'),
+                Tables\Columns\TextColumn::make('site_id')
+                    ->label('Site ID'),
+                Tables\Columns\TextColumn::make('duration_seconds')
+                    ->label('Duration (seconds)'),
+                Tables\Columns\TextColumn::make('play_count')
+                    ->label('Play Count'),
+            ];
+        }
+
+        return [
+            Tables\Columns\TextColumn::make('site_name')
+                ->label('Site Name'),
+            Tables\Columns\TextColumn::make('slide_name')
+                ->label('Slide Name'),
+            Tables\Columns\TextColumn::make('played_at')
+                ->label('Played At')
+                ->dateTime(),
+            Tables\Columns\TextColumn::make('duration')
+                ->label('Duration'),
+        ];
+    }
     protected function getHeaderActions(): array
     {
         return [
@@ -84,12 +123,20 @@ class ProofOfPlayQuery extends Page implements HasTable
                         ->label('Query Mode')
                         ->options(ProofOfPlayMode::options())
                         ->required()
-                        ->default(ProofOfPlayMode::SitesBySlide->value),
+                        ->default(ProofOfPlayMode::SitesBySlide->value)
+                        ->live(),
 
                     Forms\Components\Select::make('client')
                         ->label('Client')
-                        ->options(Client::pluck('name', 'name'))
-                        ->required(),
+                        ->options(function () {
+                            $user = auth()->user();
+                            if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
+                                return Client::pluck('name', 'name');
+                            }
+                            return $user ? $user->clients()->pluck('name', 'name') : collect();
+                        })
+                        ->required()
+                        ->live(),
 
                     Forms\Components\DatePicker::make('start')
                         ->label('Start Date')
@@ -116,6 +163,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                                 ])
                                 ->all();
                         })
+                        ->searchable()
                         ->required()
                         ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SitesBySlide->value),
 
@@ -136,6 +184,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                                 ])
                                 ->all();
                         })
+                        ->searchable()
                         ->required()
                         ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SlidesBySite->value),
                 ])
@@ -154,6 +203,9 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     public function runQuery(array $data): void
     {
+        $this->currentMode = $data['mode'];
+        $this->lastQuery = $data;
+
         $body = [
             'mode' => $data['mode'],
             'client' => $data['client'],
@@ -177,13 +229,18 @@ class ProofOfPlayQuery extends Page implements HasTable
             ])->post(config('services.api.url') . '/query', $body);
 
             if ($response->successful()) {
-                $this->tableQuery = collect($response->json());
+                $this->tableQuery = collect($response->json())->map(function ($item, $index) {
+                    $item['key'] = 'record_' . ($index + 1);
+                    return $item;
+                });
 
                 Notification::make()
                     ->title('Query completed')
                     ->body($this->tableQuery->count() . ' records found')
                     ->success()
                     ->send();
+
+                $this->dispatch('$refresh');
             } else {
                 Notification::make()
                     ->title('API Error')
@@ -222,15 +279,41 @@ class ProofOfPlayQuery extends Page implements HasTable
         }
 
         $csv = Writer::createFromString('');
-        $csv->insertOne(['Site Name', 'Slide Name', 'Played At', 'Duration']);
 
-        foreach ($records as $record) {
-            $csv->insertOne([
-                $record['site_name'] ?? '',
-                $record['slide_name'] ?? '',
-                $record['played_at'] ?? '',
-                $record['duration'] ?? '',
-            ]);
+        if ($this->currentMode === ProofOfPlayMode::SlidesBySite->value) {
+            $csv->insertOne(['Slide ID', 'Slide Name', 'Duration (seconds)', 'Play Count']);
+
+            foreach ($records as $record) {
+                $csv->insertOne([
+                    $record['slide_id'] ?? '',
+                    $record['slide_name'] ?? '',
+                    $record['duration_seconds'] ?? '',
+                    $record['play_count'] ?? '',
+                ]);
+            }
+        } elseif ($this->currentMode === ProofOfPlayMode::SitesBySlide->value) {
+            $csv->insertOne(['Device ID', 'Display ID', 'Site ID', 'Duration (seconds)', 'Play Count']);
+
+            foreach ($records as $record) {
+                $csv->insertOne([
+                    $record['device_id'] ?? '',
+                    $record['display_id'] ?? '',
+                    $record['site_id'] ?? '',
+                    $record['duration_seconds'] ?? '',
+                    $record['play_count'] ?? '',
+                ]);
+            }
+        } else {
+            $csv->insertOne(['Site Name', 'Slide Name', 'Played At', 'Duration']);
+
+            foreach ($records as $record) {
+                $csv->insertOne([
+                    $record['site_name'] ?? '',
+                    $record['slide_name'] ?? '',
+                    $record['played_at'] ?? '',
+                    $record['duration'] ?? '',
+                ]);
+            }
         }
 
         $filename = 'proof-of-play-' . now()->format('Y-m-d_H-i-s') . '.csv';

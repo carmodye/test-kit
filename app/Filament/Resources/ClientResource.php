@@ -35,6 +35,12 @@ class ClientResource extends Resource
                     ->required()
                     ->unique(ignoreRecord: true)
                     ->maxLength(255),
+
+                Forms\Components\Select::make('users')
+                    ->multiple()
+                    ->relationship('users', 'name')
+                    ->preload()
+                    ->required(),
             ]);
     }
     public static function table(Table $table): Table
@@ -45,6 +51,13 @@ class ClientResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('name')
+                    ->searchable()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('users.name')
+                    ->label('Users')
+                    ->listWithLineBreaks()
+                    ->badge()
                     ->searchable()
                     ->sortable(),
 

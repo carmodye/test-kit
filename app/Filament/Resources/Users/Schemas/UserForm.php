@@ -23,13 +23,15 @@ class UserForm
                 TextInput::make('password')
                     ->password()
                     ->confirmed()
-                    ->dehydrateStateUsing(fn ($state) => Hash::make($state))
-                    ->dehydrated(fn ($state) => filled($state))
-                    ->required(fn (string $context): bool => $context === 'create'),
+                    ->dehydrateStateUsing(fn($state) => Hash::make($state))
+                    ->dehydrated(fn($state) => filled($state))
+                    ->required(fn(string $context): bool => $context === 'create')
+                    ->visible(fn(string $context): bool => $context === 'create'),
                 TextInput::make('password_confirmation')
-                    ->required(fn (string $context): bool => $context === 'create')
+                    ->required(fn(string $context): bool => $context === 'create')
                     ->password()
-                    ->dehydrated(false),
+                    ->dehydrated(false)
+                    ->visible(fn(string $context): bool => $context === 'create'),
 
                 Select::make('roles')
                     ->searchable()
@@ -38,6 +40,13 @@ class UserForm
                     ->multiple()
                     ->relationship('roles', 'name')
                     ->label('Roles'),
+
+                Select::make('clients')
+                    ->searchable()
+                    ->preload()
+                    ->multiple()
+                    ->relationship('clients', 'name')
+                    ->label('Clients'),
             ]);
     }
 }

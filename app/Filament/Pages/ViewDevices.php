@@ -7,8 +7,10 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
-use App\Models\Device;
+use Filament\Tables\Filters\SelectFilter;
+use App\Models\Client;
 use BackedEnum;
+use App\Models\Device;
 
 class ViewDevices extends Page implements HasTable
 {
@@ -23,6 +25,11 @@ class ViewDevices extends Page implements HasTable
         return $table
             ->query(Device::query())
             ->columns([
+                Tables\Columns\TextColumn::make('client')
+                    ->label('Client')
+                    ->searchable()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('site_name')
                     ->label('Site Name')
                     ->searchable()
@@ -50,6 +57,22 @@ class ViewDevices extends Page implements HasTable
                     ->label('Last Updated')
                     ->dateTime()
                     ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('client')
+                    ->label('Client')
+                    ->options(function () {
+                        $user = auth()->user();
+                        if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
+                            return Client::pluck('name', 'name');
+                        }
+                        return $user ? $user->clients()->pluck('name', 'name') : collect();
+                    })
+                    ->query(function ($query, $data) {
+                        if ($data['value']) {
+                            $query->where('client', $data['value']);
+                        }
+                    }),
             ])
             ->paginated([10, 25, 50, 'all'])
             ->defaultPaginationPageOption(25);

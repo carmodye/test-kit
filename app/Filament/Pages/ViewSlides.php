@@ -7,8 +7,12 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Actions\Action;
 use App\Models\Slide;
 use BackedEnum;
+use App\Models\Client;
+use Filament\Tables\Filters\SelectFilter;
+
 
 class ViewSlides extends Page implements HasTable
 {
@@ -23,6 +27,11 @@ class ViewSlides extends Page implements HasTable
         return $table
             ->query(Slide::query()->active()->content()->orderBy('slide_id'))
             ->columns([
+                Tables\Columns\TextColumn::make('client')
+                    ->label('Client')
+                    ->searchable()
+                    ->sortable(),
+
                 Tables\Columns\TextColumn::make('slide_id')
                     ->label('Slide ID')
                     ->searchable()
@@ -41,6 +50,36 @@ class ViewSlides extends Page implements HasTable
                     ->label('Last Updated')
                     ->dateTime()
                     ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('client')
+                    ->label('Client')
+                    ->options(function () {
+                        $user = auth()->user();
+                        if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
+                            return Client::pluck('name', 'name');
+                        }
+                        return $user ? $user->clients()->pluck('name', 'name') : collect();
+                    })
+                    ->query(function ($query, $data) {
+                        if ($data['value']) {
+                            $query->where('client', $data['value']);
+                        }
+                    }),
+            ])
+            ->actions([
+                Action::make('view')
+                    ->icon('heroicon-o-eye')
+                    ->label('View Slide')
+                    ->modalHeading(fn($record) => "View Slide: {$record->name}")
+                    ->modalContent(function ($record) {
+                        $url = "https://{$record->client}.cms.ab-net.us/uploads/{$record->path}/{$record->name}";
+                        $isVideo = in_array(strtolower(pathinfo($record->name, PATHINFO_EXTENSION)), ['mp4', 'webm', 'ogg']);
+                        return view('filament.pages.slide-modal', compact('record', 'url', 'isVideo'));
+                    })
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Exit')
+                    ->slideOver(),
             ])
             ->paginated([10, 25, 50, 'all'])
             ->defaultPaginationPageOption(25);
