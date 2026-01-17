@@ -109,3 +109,28 @@ Key Features:
 
 The seeding system ensures that after a fresh migration, you have a fully functional application with proper role-based access control, ready for testing and development!
 
+
+
+user vs panel_user Roles - Key Differences:
+🔑 Business Logic Roles (What users CAN DO):
+super_admin: God-mode - manages users, roles, clients, full system access
+admin: Client admin - manages users within their assigned clients
+user: Basic user - view-only access with client restrictions
+🖥️ Panel Access Role (Where users can LOGIN):
+panel_user: Grants access to the Filament admin panel (/pop URL)
+📊 How They Work Together:
+User	Business Role	Panel Access	Result
+admin@example.com	super_admin	✅ (auto)	Full access to /pop panel
+dev1_admin@example.com	admin + panel_user	✅	Can login to /pop, limited admin functions
+dev1_user@example.com	user + panel_user	✅	Can login to /pop, view-only
+qa2_admin@example.com	admin + panel_user	✅	Can login to /pop, limited admin functions
+qa2_user@example.com	user + panel_user	✅	Can login to /pop, view-only
+🎯 Why This Separation?
+Filament Shield Security: Panel access is controlled separately from business permissions
+Flexibility: You could have users with business roles but no panel access (API-only users)
+Granular Control: Super admins always have panel access, others need explicit panel_user role
+💡 In Practice:
+Business roles determine what actions users can perform
+Business roles determine what actions users can perform
+Panel role determines if they can even reach the admin interface
+This architecture allows for secure, role-based access control with clear separation between "what you can do" vs "where you can login"! 🔐

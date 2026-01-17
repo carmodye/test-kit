@@ -8,13 +8,13 @@ use Illuminate\Auth\Access\HandlesAuthorization;
 class UserPolicy
 {
     use HandlesAuthorization;
-    
+
     public function viewAny(AuthUser $authUser): bool
     {
         return $authUser->can('view_any_user');
     }
 
-    public function view(AuthUser $authUser): bool
+    public function view(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('view_user');
     }
@@ -24,22 +24,22 @@ class UserPolicy
         return $authUser->can('create_user');
     }
 
-    public function update(AuthUser $authUser): bool
+    public function update(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('update_user');
     }
 
-    public function delete(AuthUser $authUser): bool
+    public function delete(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('delete_user');
     }
 
-    public function restore(AuthUser $authUser): bool
+    public function restore(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('restore_user');
     }
 
-    public function forceDelete(AuthUser $authUser): bool
+    public function forceDelete(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('force_delete_user');
     }
@@ -54,7 +54,7 @@ class UserPolicy
         return $authUser->can('restore_any_user');
     }
 
-    public function replicate(AuthUser $authUser): bool
+    public function replicate(AuthUser $authUser, $user = null): bool
     {
         return $authUser->can('replicate_user');
     }

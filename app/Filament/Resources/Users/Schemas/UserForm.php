@@ -38,7 +38,6 @@ class UserForm
                     ->preload()
                     ->required()
                     ->multiple()
-                    ->relationship('roles', 'name')
                     ->options(function () {
                         $user = auth()->user();
                         if ($user && $user->hasRole('super_admin')) {
@@ -49,13 +48,25 @@ class UserForm
                         }
                         return collect();
                     })
-                    ->label('Roles'),
+                    ->afterStateHydrated(function ($component, $state, $record) {
+                        if ($record) {
+                            $user = auth()->user();
+                            if ($user && $user->hasRole('super_admin')) {
+                                // Super admin can see all roles including panel_user
+                                $component->state($record->roles->pluck('name')->toArray());
+                            } else {
+                                // Admin users can't see/modify panel_user role
+                                $component->state($record->roles->where('name', '!=', 'panel_user')->pluck('name')->toArray());
+                            }
+                        }
+                    })
+                    ->label('Roles')
+                    ->dehydrated(false),
 
                 Select::make('clients')
                     ->searchable()
                     ->preload()
                     ->multiple()
-                    ->relationship('clients', 'name')
                     ->options(function () {
                         $user = auth()->user();
                         if ($user && $user->hasRole('super_admin')) {
@@ -66,7 +77,13 @@ class UserForm
                         }
                         return collect();
                     })
-                    ->label('Clients'),
+                    ->afterStateHydrated(function ($component, $state, $record) {
+                        if ($record) {
+                            $component->state($record->clients->pluck('name')->toArray());
+                        }
+                    })
+                    ->label('Clients')
+                    ->dehydrated(false),
             ]);
     }
 }
