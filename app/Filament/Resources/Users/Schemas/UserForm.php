@@ -39,6 +39,16 @@ class UserForm
                     ->required()
                     ->multiple()
                     ->relationship('roles', 'name')
+                    ->options(function () {
+                        $user = auth()->user();
+                        if ($user && $user->hasRole('super_admin')) {
+                            return \Spatie\Permission\Models\Role::pluck('name', 'name');
+                        }
+                        if ($user && $user->hasRole('admin')) {
+                            return \Spatie\Permission\Models\Role::where('name', 'user')->pluck('name', 'name');
+                        }
+                        return collect();
+                    })
                     ->label('Roles'),
 
                 Select::make('clients')
@@ -46,6 +56,16 @@ class UserForm
                     ->preload()
                     ->multiple()
                     ->relationship('clients', 'name')
+                    ->options(function () {
+                        $user = auth()->user();
+                        if ($user && $user->hasRole('super_admin')) {
+                            return \App\Models\Client::pluck('name', 'name');
+                        }
+                        if ($user && $user->hasRole('admin')) {
+                            return $user->clients()->pluck('name', 'name');
+                        }
+                        return collect();
+                    })
                     ->label('Clients'),
             ]);
     }

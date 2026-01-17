@@ -47,15 +47,28 @@ sail php artisan make:filament-user
 
 create admin and abAdmin```
 
-3️⃣ Assign Super Admin Role
+3️⃣ Run Database Seeder (includes user creation, role assignment, and shield setup)
 ```bash
-sail php artisan shield:super-admin --user=1 --panel=admin
-```
-do same for abAdmin 
+# Option 1: Fresh migration and seed
+sail php artisan migrate:fresh --seed
 
-4️⃣ Generate Permissions
+# Option 2: Use the custom command
+sail php artisan db:reset-seed --fresh
+```
+
+This will create:
+- Admin user: `admin@example.com` / `password` (super_admin role)
+- Clients: `dev1`, `qa2`
+- For each client: admin user and regular user with appropriate roles and associations
+
+4️⃣ (Optional) If you need to manually assign super admin role
+```bash which ever user admin is and proper panel
+sail php artisan shield:super-admin --user=1 --panel=pop
+```
+
+5️⃣ (Optional) Generate Permissions (already done by seeder)
 ```bash
-sail php artisan shield:generate --all --ignore-existing-policies --panel=admin
+sail php artisan shield:generate --all --ignore-existing-policies --panel=pop
 ```
 
 ## 🌟Panel Include 

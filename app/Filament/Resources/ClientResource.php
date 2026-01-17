@@ -14,6 +14,7 @@ use Filament\Tables\Table;
 use Filament\Actions;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
 use BackedEnum;
 
 class ClientResource extends Resource
@@ -22,6 +23,12 @@ class ClientResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
     protected static ?string $navigationLabel = 'Clients'; // fallback
+
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+        return $user && ($user->hasRole('super_admin') || $user->hasRole('admin'));
+    }
 
     public static function getNavigationLabel(): string
     {
@@ -94,18 +101,18 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        $user = auth()->user();
-        if ($user && ($user->role === 'admin' || $user->role === 'user')) {
+        $user = Auth::user();
+        if ($user && $user->hasRole('super_admin')) {
             return parent::getEloquentQuery();
         }
-        // Non-admin or not logged in: only show assigned clients
-        if ($user) {
+        if ($user && $user->hasRole('admin')) {
+            // Admin: only show assigned clients
             return parent::getEloquentQuery()->whereHas('users', function ($query) use ($user) {
                 $query->where('users.id', $user->id);
             });
         }
-        // If no user is logged in, show all clients (for development/debugging)
-        return parent::getEloquentQuery();
+        // User role: no access to client management
+        return parent::getEloquentQuery()->whereRaw('1 = 0'); // Return empty query
     }
 
     public static function getPages(): array

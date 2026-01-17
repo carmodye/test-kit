@@ -8,6 +8,7 @@ use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Log;
 use Jeffgreco13\FilamentBreezy\Traits\TwoFactorAuthenticatable;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -35,7 +36,6 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
         'name',
         'email',
         'password',
-        'role', // Add role to fillable if needed
     ];
 
     public function clients()
@@ -45,7 +45,7 @@ class User extends Authenticatable implements FilamentUser, MustVerifyEmail
 
     public function sendPasswordResetNotification($token)
     {
-        \Log::info('Sending password reset notification to: ' . $this->email);
+        Log::info('Sending password reset notification to: ' . $this->email);
         parent::sendPasswordResetNotification($token);
     }
 }

@@ -12,6 +12,7 @@ use App\Models\Slide;
 use BackedEnum;
 use App\Models\Client;
 use Filament\Tables\Filters\SelectFilter;
+use Illuminate\Support\Facades\Auth;
 
 
 class ViewSlides extends Page implements HasTable
@@ -22,10 +23,27 @@ class ViewSlides extends Page implements HasTable
 
     protected string $view = 'filament.pages.view-slides';
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('view_slides');
+    }
+
     public function table(Table $table): Table
     {
         return $table
-            ->query(Slide::query()->active()->content()->orderBy('slide_id'))
+            ->query(Slide::query())
+            ->modifyQueryUsing(function ($query) {
+                $query->active()->content()->orderBy('slide_id');
+
+                $user = Auth::user();
+                if ($user && !$user->hasRole('super_admin')) {
+                    // Filter slides by user's associated clients
+                    $clientNames = $user->clients()->pluck('name');
+                    $query->whereIn('client', $clientNames);
+                }
+
+                return $query;
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('client')
                     ->label('Client')
@@ -55,8 +73,8 @@ class ViewSlides extends Page implements HasTable
                 SelectFilter::make('client')
                     ->label('Client')
                     ->options(function () {
-                        $user = auth()->user();
-                        if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
+                        $user = Auth::user();
+                        if ($user && $user->hasRole('super_admin')) {
                             return Client::pluck('name', 'name');
                         }
                         return $user ? $user->clients()->pluck('name', 'name') : collect();

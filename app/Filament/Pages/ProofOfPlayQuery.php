@@ -27,6 +27,11 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     protected string $view = 'filament.pages.proof-of-play-query';
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('view_proof_of_play');
+    }
+
     public ?array $data = [];
 
     public $tableQuery = null;

@@ -18,12 +18,27 @@ class ViewDevices extends Page implements HasTable
 
     protected static BackedEnum|string|null $navigationIcon = 'heroicon-o-computer-desktop';
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('view_devices');
+    }
+
     protected string $view = 'filament.pages.view-devices';
 
     public function table(Table $table): Table
     {
         return $table
             ->query(Device::query())
+            ->modifyQueryUsing(function ($query) {
+                $user = auth()->user();
+                if ($user && !$user->hasRole('super_admin')) {
+                    // Filter devices by user's associated clients
+                    $clientNames = $user->clients()->pluck('name');
+                    $query->whereIn('client', $clientNames);
+                }
+
+                return $query;
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('client')
                     ->label('Client')
@@ -63,7 +78,7 @@ class ViewDevices extends Page implements HasTable
                     ->label('Client')
                     ->options(function () {
                         $user = auth()->user();
-                        if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
+                        if ($user && $user->hasRole('super_admin')) {
                             return Client::pluck('name', 'name');
                         }
                         return $user ? $user->clients()->pluck('name', 'name') : collect();
