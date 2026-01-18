@@ -134,3 +134,21 @@ Business roles determine what actions users can perform
 Business roles determine what actions users can perform
 Panel role determines if they can even reach the admin interface
 This architecture allows for secure, role-based access control with clear separation between "what you can do" vs "where you can login"! 🔐
+The updated implementation uses client IDs directly for better reliability and implements the tenant-like scoping you described.
+
+Key Changes:
+Client Selection by ID: In UserForm.php, the clients select now uses pluck('name', 'id'), so the form submits client IDs instead of names. This avoids potential name-matching issues.
+
+Simplified Assignment: In UserResource.php, the afterCreate and afterSave methods now directly sync the client IDs without needing to query the database again.
+
+Tenant Scoping:
+
+Super Admin: Can assign any clients and see all users.
+Admin: Can only assign clients they are associated with, and can only view users who share those clients (plus themselves).
+This creates a multi-tenant-like system where admins are scoped to their client groups.
+How It Works:
+When an admin creates a user, they can only select from their associated clients.
+The selected client IDs are stored temporarily and synced to the user after creation.
+The user will be visible to the admin in the list because they share the client association.
+Roles are assigned based on permissions (admins can assign 'user' role).
+This approach should reliably save both roles and client associations. Test creating a user as an admin to confirm the associations are created and the user appears in the list. For super_admin, verify full access works as expected.

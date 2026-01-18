@@ -61,29 +61,32 @@ class UserForm
                         }
                     })
                     ->label('Roles')
-                    ->dehydrated(false),
+                    ->visible(fn(string $context): bool => $context === 'edit')
+                    ->dehydrated(true),
 
                 Select::make('clients')
                     ->searchable()
                     ->preload()
                     ->multiple()
+                    ->required(fn() => auth()->user()?->hasRole('admin'))
                     ->options(function () {
                         $user = auth()->user();
                         if ($user && $user->hasRole('super_admin')) {
-                            return \App\Models\Client::pluck('name', 'name');
+                            return \App\Models\Client::pluck('name', 'id');
                         }
                         if ($user && $user->hasRole('admin')) {
-                            return $user->clients()->pluck('name', 'name');
+                            return $user->clients()->pluck('clients.name', 'clients.id');
                         }
                         return collect();
                     })
                     ->afterStateHydrated(function ($component, $state, $record) {
                         if ($record) {
-                            $component->state($record->clients->pluck('name')->toArray());
+                            $component->state($record->clients->pluck('id')->toArray());
                         }
                     })
                     ->label('Clients')
-                    ->dehydrated(false),
+                    ->visible(fn(string $context): bool => $context === 'edit')
+                    ->dehydrated(true),
             ]);
     }
 }

@@ -15,6 +15,30 @@ class EditUser extends EditRecord
 {
     protected static string $resource = UserResource::class;
 
+    public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
+    {
+        $data = $this->form->getState();
+
+        static::getResource()::$tempData = [
+            'roles' => $data['roles'] ?? [],
+            'clients' => $data['clients'] ?? []
+        ];
+
+        unset($data['roles'], $data['clients']);
+
+        $this->record->update($data);
+
+        // Assign roles and clients
+        $record = $this->record;
+        $record->assignRole(static::getResource()::$tempData['roles'] ?? []);
+        $clients = array_map('intval', static::getResource()::$tempData['clients'] ?? []);
+        $record->clients()->sync($clients);
+        static::getResource()::$tempData = [];
+
+        $this->redirect($this->getRedirectUrl());
+    }
+
+
     protected function getHeaderActions(): array
     {
         return [

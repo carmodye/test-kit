@@ -14,6 +14,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 use UnitEnum;
 
 class UserResource extends Resource
@@ -27,13 +28,12 @@ class UserResource extends Resource
     protected static string|UnitEnum|null $navigationGroup = 'Administration';
 
     // Static properties to store pending roles and clients during form processing
-    protected static array $pendingRoles = [];
-    protected static array $pendingClients = [];
+    public static array $tempData = [];
 
     public static function canAccess(): bool
     {
         $user = auth()->user();
-        return $user && ($user->hasRole('super_admin') || $user->hasRole('admin'));
+        return $user && $user->hasRole('super_admin');
     }
 
     public static function form(Schema $schema): Schema
@@ -63,85 +63,9 @@ class UserResource extends Resource
         return parent::getEloquentQuery()->whereRaw('1 = 0'); // Return empty query
     }
 
-    protected static function mutateFormDataBeforeCreate(array $data): array
+    public static function afterCreate($record): void
     {
-        // Handle roles and clients assignment for new users
-        $roles = $data['roles'] ?? [];
-        $clients = $data['clients'] ?? [];
-
-        // Remove from data array so they don't interfere with model creation
-        unset($data['roles'], $data['clients']);
-
-        // Store for after creation
-        static::$pendingRoles = $roles;
-        static::$pendingClients = $clients;
-
-        return $data;
-    }
-
-    protected static function afterCreate($record): void
-    {
-        // Assign roles and clients after user creation
-        if (isset(static::$pendingRoles) && static::$pendingRoles) {
-            $record->assignRole(static::$pendingRoles);
-        }
-
-        if (isset(static::$pendingClients) && static::$pendingClients) {
-            $clientIds = \App\Models\Client::whereIn('name', static::$pendingClients)->pluck('id');
-            $record->clients()->sync($clientIds);
-        }
-
-        // Clean up
-        unset(static::$pendingRoles, static::$pendingClients);
-    }
-
-    protected static function mutateFormDataBeforeSave(array $data): array
-    {
-        // Handle roles and clients for updates
-        if (isset($data['roles'])) {
-            static::$pendingRoles = $data['roles'];
-            unset($data['roles']);
-        }
-
-        if (isset($data['clients'])) {
-            static::$pendingClients = $data['clients'];
-            unset($data['clients']);
-        }
-
-        // Handle password update from new_password field
-        if (isset($data['new_password']) && filled($data['new_password'])) {
-            $data['password'] = \Illuminate\Support\Facades\Hash::make($data['new_password']);
-        }
-
-        // Remove new_password fields from data before saving
-        unset($data['new_password'], $data['new_password_confirmation']);
-
-        return $data;
-    }
-
-    protected static function afterSave($record): void
-    {
-        // Assign roles and clients after user update
-        if (isset(static::$pendingRoles)) {
-            // Preserve the panel_user role if it exists
-            $currentRoles = $record->roles->pluck('name')->toArray();
-            $hasPanelUser = in_array('panel_user', $currentRoles);
-
-            $record->syncRoles(static::$pendingRoles);
-
-            // Re-add panel_user role if it was present
-            if ($hasPanelUser) {
-                $record->assignRole('panel_user');
-            }
-        }
-
-        if (isset(static::$pendingClients)) {
-            $clientIds = \App\Models\Client::whereIn('name', static::$pendingClients)->pluck('id');
-            $record->clients()->sync($clientIds);
-        }
-
-        // Clean up
-        unset(static::$pendingRoles, static::$pendingClients);
+        // No assignment on create, done on edit
     }
 
     public static function getRelations(): array
