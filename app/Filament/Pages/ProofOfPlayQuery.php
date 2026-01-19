@@ -18,6 +18,7 @@ use App\Models\Slide;
 use Filament\Support\ArrayRecord;
 use Filament\Actions\Action;
 use BackedEnum;
+use Illuminate\Support\Facades\Log;
 
 class ProofOfPlayQuery extends Page implements HasTable
 {
@@ -39,6 +40,20 @@ class ProofOfPlayQuery extends Page implements HasTable
     public $currentMode = null;
 
     public $lastQuery = null;
+
+    public $fetchedSlides = [];
+
+    public $fetchedSites = [];
+
+    public $lastClient = null;
+
+    public $lastStart = null;
+
+    public $lastEnd = null;
+
+    public $allSlides = [];
+
+    public $allSites = [];
 
     public function mount(): void
     {
@@ -124,74 +139,115 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ->icon('heroicon-o-play')
                 ->color('primary')
                 ->form([
+                    Forms\Components\DatePicker::make('start')
+                        ->label('Start Date')
+                        ->required()
+                        ->live()
+                        ->readonly(fn($get) => $get('client')),
+
+                    Forms\Components\DatePicker::make('end')
+                        ->label('End Date')
+                        ->required()
+                        ->live()
+                        ->readonly(fn($get) => $get('client')),
+
+                    Forms\Components\Select::make('client')
+                        ->label('Client')
+                        ->options(function ($get) {
+                            $user = auth()->user();
+                            $options = $user && ($user->hasRole('super_admin') || $user->hasRole('admin')) ? Client::pluck('name', 'name') : ($user ? $user->clients()->pluck('name', 'name') : collect());
+
+                            $start = $get('start');
+                            $end = $get('end');
+                            if ($start && $end && empty($this->allSlides)) {
+                                // fetch data
+                                $body = [
+                                    'mode' => 'playedSlides',
+                                    'start' => $start . 'T00:00:00Z',
+                                    'end' => $end . 'T00:00:00Z',
+                                ];
+                                Log::info('Making API call for data with body: ' . json_encode($body));
+                                try {
+                                    $response = Http::withHeaders([
+                                        'authorizationToken' => 'my-secret',
+                                        'x-api-key' => 'my key',
+                                        'Content-Type' => 'application/json',
+                                    ])->post(config('services.api.url') . '/query', $body);
+
+                                    if ($response->successful()) {
+                                        $data = $response->json();
+                                        Log::info('Data API response successful, data count: ' . count($data));
+                                        $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
+                                            $item['slide_id'] => $item
+                                        ])->all();
+                                        $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
+                                            $item['site_id'] => $item
+                                        ])->all();
+                                        Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
+                                    } else {
+                                        Log::info('Data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
+                                    }
+                                } catch (\Exception $e) {
+                                    Log::info('Exception fetching data: ' . $e->getMessage());
+                                }
+                                $this->lastStart = $start;
+                                $this->lastEnd = $end;
+                            }
+
+                            return $options;
+                        })
+                        ->required()
+                        ->live()
+                        ->visible(fn($get) => $get('start') && $get('end')),
+
                     Forms\Components\Select::make('mode')
                         ->label('Query Mode')
                         ->options(ProofOfPlayMode::options())
                         ->required()
                         ->default(ProofOfPlayMode::SitesBySlide->value)
-                        ->live(),
-
-                    Forms\Components\Select::make('client')
-                        ->label('Client')
-                        ->options(function () {
-                            $user = auth()->user();
-                            if ($user && ($user->hasRole('super_admin') || $user->hasRole('admin'))) {
-                                return Client::pluck('name', 'name');
-                            }
-                            return $user ? $user->clients()->pluck('name', 'name') : collect();
-                        })
-                        ->required()
-                        ->live(),
-
-                    Forms\Components\DatePicker::make('start')
-                        ->label('Start Date')
-                        ->required(),
-
-                    Forms\Components\DatePicker::make('end')
-                        ->label('End Date')
-                        ->required(),
+                        ->live()
+                        ->visible(fn($get) => $get('start') && $get('end') && $get('client')),
 
                     Forms\Components\Select::make('slideId')
                         ->label('Slide')
                         ->options(function ($get) {
                             $client = $get('client');
-                            if (!$client)
+                            $start = $get('start');
+                            $end = $get('end');
+                            if (!$start || !$end)
                                 return [];
 
-                            return Slide::where('client', $client)
-                                ->active()
-                                ->content()
-                                ->orderBy('slide_id')
-                                ->get()
-                                ->mapWithKeys(fn($slide) => [
-                                    $slide->slide_id => "[{$slide->slide_id}] {$slide->name}"
-                                ])
-                                ->all();
+                            if (!$client)
+                                return [];
+                            return collect($this->allSlides)->where('client', $client)->mapWithKeys(fn($item) => [
+                                $item['slide_id'] => "[{$item['slide_id']}] {$item['slide_name']}"
+                            ])->all();
                         })
                         ->searchable()
                         ->required()
-                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SitesBySlide->value),
+                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SitesBySlide->value && $get('start') && $get('end') && $get('client')),
 
                     Forms\Components\Select::make('siteId')
                         ->label('Site')
                         ->options(function ($get) {
                             $client = $get('client');
-                            if (!$client)
+                            $start = $get('start');
+                            $end = $get('end');
+                            Log::info('Fetching sites options called with client: ' . $client . ', start: ' . $start . ', end: ' . $end);
+                            if (!$start || !$end)
                                 return [];
 
-                            return Device::where('client', $client)
-                                ->select(['site_id', 'site_name'])
-                                ->distinct()
-                                ->orderBy('site_name')
-                                ->get()
-                                ->mapWithKeys(fn($device) => [
-                                    $device->site_id => "{$device->site_id} - {$device->site_name}"
-                                ])
-                                ->all();
+                            if (!$client)
+                                return [];
+                            $filteredSites = collect($this->allSites)->where('client', $client);
+                            Log::info('Filtered sites for client ' . $client . ': ' . $filteredSites->count() . ' sites');
+                            return $filteredSites->mapWithKeys(fn($item) => [
+                                $item['site_id'] => $item['site_id']
+                            ])->all();
                         })
                         ->searchable()
                         ->required()
-                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SlidesBySite->value),
+                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SlidesBySite->value && $get('start') && $get('end') && $get('client')),
                 ])
                 ->action(function (array $data): void {
                     $this->runQuery($data);
@@ -226,6 +282,7 @@ class ProofOfPlayQuery extends Page implements HasTable
             $body['siteId'] = (int) $data['siteId'];
         }
 
+        Log::info('Making API call for query with body: ' . json_encode($body));
         try {
             $response = Http::withHeaders([
                 'authorizationToken' => 'my-secret',
