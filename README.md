@@ -31,6 +31,13 @@ laravel new test-kit --using=ercogx/laravel-filament-starter-kit
 
 > If you want a Filament v3 (not recommended) ```laravel new test-kit --using=ercogx/laravel-filament-starter-kit:1.8.0```
 
+## Sail for Docker Dev
+
+composer require laravel/sail --dev
+php artisan sail:install
+
+- pick what you need should then use mysql
+
 ## ⚙️ Setup
 
 1️⃣ **Database Configuration**
@@ -60,6 +67,9 @@ This will create:
 - Admin user: `admin@example.com` / `password` (super_admin role)
 - Clients: `dev1`, `qa2`
 - For each client: admin user and regular user with appropriate roles and associations
+
+sail npm install
+sail npm run build
 
 4️⃣ (Optional) If you need to manually assign super admin role
 ```bash which ever user admin is and proper panel

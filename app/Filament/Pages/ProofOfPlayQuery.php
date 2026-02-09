@@ -139,17 +139,17 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ->icon('heroicon-o-play')
                 ->color('primary')
                 ->form([
-                    Forms\Components\DatePicker::make('start')
-                        ->label('Start Date')
-                        ->required()
-                        ->live()
-                        ->readonly(fn($get) => $get('client')),
+                        Forms\Components\DatePicker::make('start')
+                            ->label('Start Date')
+                            ->required()
+                            ->live()
+                            ->readonly(fn($get) => $get('client')),
 
-                    Forms\Components\DatePicker::make('end')
-                        ->label('End Date')
-                        ->required()
-                        ->live()
-                        ->readonly(fn($get) => $get('client')),
+                        Forms\Components\DatePicker::make('end')
+                            ->label('End Date')
+                            ->required()
+                            ->live()
+                            ->readonly(fn($get) => $get('client')),
 
                     Forms\Components\Select::make('client')
                         ->label('Client')
@@ -172,7 +172,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                                         'authorizationToken' => 'my-secret',
                                         'x-api-key' => 'my key',
                                         'Content-Type' => 'application/json',
-                                    ])->post(config('services.api.url') . '/query', $body);
+                                    ])->post(config('services.api.url') . '/queryv3', $body);
 
                                     if ($response->successful()) {
                                         $data = $response->json();
@@ -271,7 +271,7 @@ class ProofOfPlayQuery extends Page implements HasTable
             'mode' => $data['mode'],
             'client' => $data['client'],
             'start' => $data['start'] . 'T00:00:00Z',
-            'end' => $data['end'] . 'T00:00:00Z',
+            'end' => $data['end'] . 'T23:59:00Z',
         ];
 
         if ($data['mode'] === ProofOfPlayMode::SitesBySlide->value) {
@@ -288,7 +288,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                 'authorizationToken' => 'my-secret',
                 'x-api-key' => 'my key',
                 'Content-Type' => 'application/json',
-            ])->post(config('services.api.url') . '/query', $body);
+            ])->post(config('services.api.url') . '/queryv3', $body);
 
             if ($response->successful()) {
                 $this->tableQuery = collect($response->json())->map(function ($item, $index) {
