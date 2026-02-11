@@ -82,15 +82,11 @@ class ProofOfPlayQuery extends Page implements HasTable
                     ->icon('heroicon-o-eye')
                     ->label('View Slide')
                     ->fillForm(function ($record) {
-                        // Manually load the slide relationship
                         $record->load('slide');
                         $slide = $record->slide;
-                        
                         if (!$slide) return [];
-                        
                         $url = "https://{$slide->client}.cms.ab-net.us/uploads/{$slide->path}/{$slide->name}";
                         $isVideo = in_array(strtolower(pathinfo($slide->name, PATHINFO_EXTENSION)), ['mp4', 'webm', 'ogg']);
-                        
                         return [
                             'slide' => $slide,
                             'url' => $url,
@@ -104,14 +100,11 @@ class ProofOfPlayQuery extends Page implements HasTable
                                 $slide = $get('slide');
                                 $url = $get('url');
                                 $isVideo = $get('is_video');
-                                
                                 if (!$slide) return new \Illuminate\Support\HtmlString('<p>Slide not found.</p>');
-                                
                                 $html = '<div class="space-y-4">';
                                 $html .= '<div>';
                                 $html .= '<h3 class="text-lg font-semibold mb-2">Preview</h3>';
                                 $html .= '<div class="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 flex justify-center">';
-                                
                                 if ($isVideo) {
                                     $html .= '<video controls class="max-w-full max-h-96 rounded">';
                                     $html .= '<source src="' . $url . '" type="video/' . strtolower(pathinfo($slide->name, PATHINFO_EXTENSION)) . '">';
@@ -120,9 +113,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                                 } else {
                                     $html .= '<img src="' . $url . '" alt="' . $slide->name . '" class="max-w-full max-h-96 object-contain rounded">';
                                 }
-                                
                                 $html .= '</div></div></div>';
-                                
                                 return new \Illuminate\Support\HtmlString($html);
                             }),
                     ])
@@ -131,10 +122,55 @@ class ProofOfPlayQuery extends Page implements HasTable
                     ->modalCancelActionLabel('Close')
                     ->visible(fn($record) => $this->currentMode === ProofOfPlayMode::SlidesBySite->value && $record->slide),
             ])
+            ->headerActions([
+                Action::make('exportPdf')
+                    ->label('Export PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('secondary')
+                    ->action('exportPdf')
+                    ->visible(fn() => $this->tableQuery && $this->tableQuery->count() > 0),
+                Action::make('exportCsv')
+                    ->label('Export CSV')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->color('success')
+                    ->action('exportCsv')
+                    ->visible(fn() => $this->tableQuery && $this->tableQuery->count() > 0),
+            ])
             ->emptyStateHeading('No results')
             ->emptyStateDescription('Run a query to see proof of play data.')
             ->paginated([10, 25, 50])
             ->defaultPaginationPageOption(25);
+    }
+
+    public function exportPdf()
+    {
+        $records = $this->tableQuery;
+        if (!$records || $records->isEmpty()) {
+            Notification::make()
+                ->title('No data to export')
+                ->danger()
+                ->send();
+            return;
+        }
+        $mode = null;
+        if ($this->currentMode === ProofOfPlayMode::SlidesBySite->value) {
+            $mode = 'slidesBySite';
+        } elseif ($this->currentMode === ProofOfPlayMode::SitesBySlide->value) {
+            $mode = 'sitesBySlide';
+        }
+        $pdf = app('dompdf.wrapper');
+        $pdf->loadView('exports.proof-of-play-results', [
+            'records' => $records,
+            'mode' => $mode,
+        ]);
+        $filename = 'proof-of-play-' . now()->format('Y-m-d_H-i-s') . '.pdf';
+        return response()->streamDownload(
+            function () use ($pdf) {
+                echo $pdf->stream();
+            },
+            $filename,
+            ['Content-Type' => 'application/pdf']
+        );
     }
 
     public function getTableRecords(): \Illuminate\Support\Collection|\Illuminate\Contracts\Pagination\Paginator|\Illuminate\Contracts\Pagination\CursorPaginator
