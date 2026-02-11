@@ -75,8 +75,62 @@ class ProofOfPlayQuery extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(ProofOfPlayResult::query())
+            ->query(ProofOfPlayResult::with(['slide']))
             ->columns($this->getTableColumns())
+            ->actions([
+                Action::make('view_slide')
+                    ->icon('heroicon-o-eye')
+                    ->label('View Slide')
+                    ->fillForm(function ($record) {
+                        // Manually load the slide relationship
+                        $record->load('slide');
+                        $slide = $record->slide;
+                        
+                        if (!$slide) return [];
+                        
+                        $url = "https://{$slide->client}.cms.ab-net.us/uploads/{$slide->path}/{$slide->name}";
+                        $isVideo = in_array(strtolower(pathinfo($slide->name, PATHINFO_EXTENSION)), ['mp4', 'webm', 'ogg']);
+                        
+                        return [
+                            'slide' => $slide,
+                            'url' => $url,
+                            'is_video' => $isVideo,
+                        ];
+                    })
+                    ->form([
+                        Forms\Components\Placeholder::make('preview')
+                            ->label('')
+                            ->content(function ($get) {
+                                $slide = $get('slide');
+                                $url = $get('url');
+                                $isVideo = $get('is_video');
+                                
+                                if (!$slide) return new \Illuminate\Support\HtmlString('<p>Slide not found.</p>');
+                                
+                                $html = '<div class="space-y-4">';
+                                $html .= '<div>';
+                                $html .= '<h3 class="text-lg font-semibold mb-2">Preview</h3>';
+                                $html .= '<div class="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 flex justify-center">';
+                                
+                                if ($isVideo) {
+                                    $html .= '<video controls class="max-w-full max-h-96 rounded">';
+                                    $html .= '<source src="' . $url . '" type="video/' . strtolower(pathinfo($slide->name, PATHINFO_EXTENSION)) . '">';
+                                    $html .= 'Your browser does not support the video tag.';
+                                    $html .= '</video>';
+                                } else {
+                                    $html .= '<img src="' . $url . '" alt="' . $slide->name . '" class="max-w-full max-h-96 object-contain rounded">';
+                                }
+                                
+                                $html .= '</div></div></div>';
+                                
+                                return new \Illuminate\Support\HtmlString($html);
+                            }),
+                    ])
+                    ->modalHeading(fn($record) => "View Slide: " . ($record->slide?->name ?? 'Unknown'))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Close')
+                    ->visible(fn($record) => $this->currentMode === ProofOfPlayMode::SlidesBySite->value && $record->slide),
+            ])
             ->emptyStateHeading('No results')
             ->emptyStateDescription('Run a query to see proof of play data.')
             ->paginated([10, 25, 50])
@@ -108,8 +162,12 @@ class ProofOfPlayQuery extends Page implements HasTable
             return [
                 Tables\Columns\TextColumn::make('device_id')
                     ->label('Device ID'),
+                Tables\Columns\TextColumn::make('device_name')
+                    ->label('Device Name'),
                 Tables\Columns\TextColumn::make('display_id')
                     ->label('Display ID'),
+                Tables\Columns\TextColumn::make('display_name')
+                    ->label('Display Name'),
                 Tables\Columns\TextColumn::make('site_name')
                     ->label('Site Name'),
                 Tables\Columns\TextColumn::make('duration_seconds')
@@ -177,11 +235,13 @@ class ProofOfPlayQuery extends Page implements HasTable
                                         'end' => $end . 'T23:59:00Z',
                                     ];
                                     Log::info('Making API call for dropdown data with body: ' . json_encode($body));
-                                    Notification::make()
-                                        ->title('API Call Debug')
-                                        ->body('Request body: ' . json_encode($body))
-                                        ->info()
-                                        ->send();
+                                    if ($this->shouldShowDebugNotifications()) {
+                                        Notification::make()
+                                            ->title('API Call Debug')
+                                            ->body('Request body: ' . json_encode($body))
+                                            ->info()
+                                            ->send();
+                                    }
                                     try {
                                         $response = Http::withHeaders([
                                             'authorizationToken' => 'my-secret',
@@ -225,11 +285,13 @@ class ProofOfPlayQuery extends Page implements HasTable
                                         'end' => $state . 'T23:59:00Z',
                                     ];
                                     Log::info('Making API call for dropdown data with body: ' . json_encode($body));
-                                    Notification::make()
-                                        ->title('API Call Debug')
-                                        ->body('Request body: ' . json_encode($body))
-                                        ->info()
-                                        ->send();
+                                    if ($this->shouldShowDebugNotifications()) {
+                                        Notification::make()
+                                            ->title('API Call Debug')
+                                            ->body('Request body: ' . json_encode($body))
+                                            ->info()
+                                            ->send();
+                                    }
                                     try {
                                         $response = Http::withHeaders([
                                             'authorizationToken' => 'my-secret',
@@ -281,11 +343,13 @@ class ProofOfPlayQuery extends Page implements HasTable
                                     'end' => $end . 'T23:59:00Z',
                                 ];
                                 Log::info('Making API call for dropdown data on client change with body: ' . json_encode($body));
-                                Notification::make()
-                                    ->title('API Call Debug')
-                                    ->body('Request body: ' . json_encode($body))
-                                    ->info()
-                                    ->send();
+                                if ($this->shouldShowDebugNotifications()) {
+                                    Notification::make()
+                                        ->title('API Call Debug')
+                                        ->body('Request body: ' . json_encode($body))
+                                        ->info()
+                                        ->send();
+                                }
                                 try {
                                     $response = Http::withHeaders([
                                         'authorizationToken' => 'my-secret',
@@ -373,7 +437,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ->icon('heroicon-o-document-arrow-down')
                 ->color('success')
                 ->action('exportCsv')
-                ->visible(fn() => $this->getTableQuery()->count() > 0),
+                ->visible(fn() => $this->tableQuery && $this->tableQuery->count() > 0),
         ];
     }
 
@@ -398,11 +462,13 @@ class ProofOfPlayQuery extends Page implements HasTable
         }
 
         Log::info('Making API call for query with body: ' . json_encode($body));
-        Notification::make()
-            ->title('API Call Debug')
-            ->body('Request body: ' . json_encode($body))
-            ->info()
-            ->send();
+        if ($this->shouldShowDebugNotifications()) {
+            Notification::make()
+                ->title('API Call Debug')
+                ->body('Request body: ' . json_encode($body))
+                ->info()
+                ->send();
+        }
         try {
             $response = Http::withHeaders([
                 'authorizationToken' => 'my-secret',
@@ -441,6 +507,8 @@ class ProofOfPlayQuery extends Page implements HasTable
                         'slide_name' => $slide ? $slide->name : ($item['slide_name'] ?? null),
                         'device_id' => $item['device_id'] ?? null,
                         'display_id' => $item['display_id'] ?? null,
+                        'display_name' => $device ? $device->display_name : null,
+                        'device_name' => $device ? $device->device_name : null,
                         'site_id' => $item['site_id'] ?? null,
                         'site_name' => $device ? $device->site_name : ($item['site_name'] ?? null),
                         'duration_seconds' => $item['duration_seconds'] ?? null,
@@ -482,16 +550,17 @@ class ProofOfPlayQuery extends Page implements HasTable
         }
     }
 
-    protected function getTableQuery()
+    protected function shouldShowDebugNotifications(): bool
     {
-        return ProofOfPlayResult::all();
+        $logLevel = env('LOG_LEVEL', 'debug');
+        return in_array(strtolower($logLevel), ['debug', 'info']);
     }
 
     public function exportCsv()
     {
-        $records = $this->getTableQuery();
+        $records = $this->tableQuery;
 
-        if ($records->isEmpty()) {
+        if (!$records || $records->isEmpty()) {
             Notification::make()
                 ->title('No data to export')
                 ->danger()
@@ -513,12 +582,14 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ]);
             }
         } elseif ($this->currentMode === ProofOfPlayMode::SitesBySlide->value) {
-            $csv->insertOne(['Device ID', 'Display ID', 'Site Name', 'Duration (hours)', 'Play Count']);
+            $csv->insertOne(['Device ID', 'Device Name', 'Display ID', 'Display Name', 'Site Name', 'Duration (hours)', 'Play Count']);
 
             foreach ($records as $record) {
                 $csv->insertOne([
                     $record->device_id ?? '',
+                    $record->device_name ?? '',
                     $record->display_id ?? '',
+                    $record->display_name ?? '',
                     $record->site_name ?? '',
                     $record->duration_seconds ? number_format($record->duration_seconds / 3600, 2) : '0.00',
                     $record->play_count ?? '',

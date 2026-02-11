@@ -13,6 +13,8 @@ class Device extends Model
         'client',
         'device_id',
         'display_id',
+        'display_name',
+        'device_name',
         'site_name',
         'app_name',
         'site_id',

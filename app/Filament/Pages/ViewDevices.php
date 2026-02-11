@@ -8,6 +8,8 @@ use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
+//use Filament\Tables\Actions\Action;
+use Filament\Actions\Action;
 use App\Models\Client;
 use BackedEnum;
 use App\Models\Device;
@@ -64,8 +66,16 @@ class ViewDevices extends Page implements HasTable
                     ->label('Device ID')
                     ->searchable(),
 
+                Tables\Columns\TextColumn::make('device_name')
+                    ->label('Device Name')
+                    ->searchable(),
+
                 Tables\Columns\TextColumn::make('display_id')
                     ->label('Display ID')
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('display_name')
+                    ->label('Display Name')
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('updated_at')
@@ -90,7 +100,18 @@ class ViewDevices extends Page implements HasTable
                     }),
             ])
             ->paginated([10, 25, 50, 'all'])
-            ->defaultPaginationPageOption(25);
+            ->defaultPaginationPageOption(25)
+            ->actions([
+                Action::make('view_other_data')
+                    ->label('View Other Data')
+                    ->icon('heroicon-o-eye')
+                    ->modalHeading('Device Other Data')
+                    ->modalContent(function (Device $record) {
+                        return view('filament.modals.device-other-data', ['otherData' => $record->other_data]);
+                    })
+                    ->modalSubmitAction(false)
+                    ->slideOver(),
+            ]);
     }
 
     public function getTitle(): string

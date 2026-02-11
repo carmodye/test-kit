@@ -45,6 +45,8 @@ class FetchDeviceDataJob implements ShouldQueue
                             'client' => $client->name,
                             'device_id' => $device['device_id'],
                             'display_id' => $device['display_id'],
+                            'display_name' => $device['display_name'] ?? null,
+                            'device_name' => $device['device_name'] ?? null,
                             'site_name' => $device['site_name'],
                             'app_name' => $device['app_name'],
                             'site_id' => $device['site_id'],

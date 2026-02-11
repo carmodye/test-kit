@@ -13,6 +13,8 @@ class ProofOfPlayResult extends Model
         'slide_name',
         'device_id',
         'display_id',
+        'display_name',
+        'device_name',
         'site_id',
         'site_name',
         'duration_seconds',
@@ -29,7 +31,6 @@ class ProofOfPlayResult extends Model
 
     public function slide(): BelongsTo
     {
-        return $this->belongsTo(Slide::class, 'slide_id', 'slide_id')
-            ->where('client', $this->client);
+        return $this->belongsTo(Slide::class, 'slide_id', 'slide_id');
     }
 }
