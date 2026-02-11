@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProofOfPlayResult extends Model
 {
@@ -19,4 +20,16 @@ class ProofOfPlayResult extends Model
         'played_at',
         'duration',
     ];
+
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class, 'device_id', 'device_id')
+            ->where('client', $this->client);
+    }
+
+    public function slide(): BelongsTo
+    {
+        return $this->belongsTo(Slide::class, 'slide_id', 'slide_id')
+            ->where('client', $this->client);
+    }
 }

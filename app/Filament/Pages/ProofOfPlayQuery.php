@@ -15,6 +15,7 @@ use App\Models\Client;
 use App\Enums\ProofOfPlayMode;
 use App\Models\Device;
 use App\Models\Slide;
+use App\Models\ProofOfPlayResult;
 use Filament\Support\ArrayRecord;
 use Filament\Actions\Action;
 use BackedEnum;
@@ -73,10 +74,8 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     public function table(Table $table): Table
     {
-        ArrayRecord::keyName('key');
-
         return $table
-            ->query(Client::query()->whereRaw('1 = 0')) // Dummy query to satisfy Filament
+            ->query(ProofOfPlayResult::query())
             ->columns($this->getTableColumns())
             ->emptyStateHeading('No results')
             ->emptyStateDescription('Run a query to see proof of play data.')
@@ -98,7 +97,8 @@ class ProofOfPlayQuery extends Page implements HasTable
                 Tables\Columns\TextColumn::make('slide_name')
                     ->label('Slide Name'),
                 Tables\Columns\TextColumn::make('duration_seconds')
-                    ->label('Duration (seconds)'),
+                    ->label('Duration (hours)')
+                    ->formatStateUsing(fn ($state) => $state ? number_format($state / 3600, 2) : '0.00'),
                 Tables\Columns\TextColumn::make('play_count')
                     ->label('Play Count'),
             ];
@@ -110,10 +110,11 @@ class ProofOfPlayQuery extends Page implements HasTable
                     ->label('Device ID'),
                 Tables\Columns\TextColumn::make('display_id')
                     ->label('Display ID'),
-                Tables\Columns\TextColumn::make('site_id')
-                    ->label('Site ID'),
+                Tables\Columns\TextColumn::make('site_name')
+                    ->label('Site Name'),
                 Tables\Columns\TextColumn::make('duration_seconds')
-                    ->label('Duration (seconds)'),
+                    ->label('Duration (hours)')
+                    ->formatStateUsing(fn ($state) => $state ? number_format($state / 3600, 2) : '0.00'),
                 Tables\Columns\TextColumn::make('play_count')
                     ->label('Play Count'),
             ];
@@ -128,7 +129,29 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ->label('Played At')
                 ->dateTime(),
             Tables\Columns\TextColumn::make('duration')
-                ->label('Duration'),
+                ->label('Duration (hours)')
+                ->formatStateUsing(function ($state) {
+                    if (!$state) return '0.00';
+                    
+                    // If it's already a formatted string, try to extract hours
+                    if (is_string($state) && !is_numeric($state)) {
+                        // Try to parse formatted duration like "2h 30m 15s"
+                        if (preg_match('/(\d+)h/', $state, $matches)) {
+                            $hours = (int)$matches[1];
+                            if (preg_match('/(\d+)m/', $state, $matches)) {
+                                $hours += $matches[1] / 60;
+                            }
+                            if (preg_match('/(\d+)s/', $state, $matches)) {
+                                $hours += $matches[1] / 3600;
+                            }
+                            return number_format($hours, 2);
+                        }
+                        return $state; // Return as-is if can't parse
+                    }
+                    
+                    // If it's numeric (seconds), convert to hours
+                    return number_format($state / 3600, 2);
+                }),
         ];
     }
     protected function getHeaderActions(): array
@@ -388,10 +411,49 @@ class ProofOfPlayQuery extends Page implements HasTable
             ])->post(config('services.api.url') . '/queryv3', $body);
 
             if ($response->successful()) {
-                $this->tableQuery = collect($response->json())->map(function ($item, $index) {
-                    $item['key'] = 'record_' . ($index + 1);
-                    return $item;
+                $apiResults = collect($response->json());
+                
+                // Clear previous results
+                ProofOfPlayResult::truncate();
+                
+                // Store results with enriched data
+                $results = $apiResults->map(function ($item) use ($data) {
+                    // Get device info for site_name
+                    $device = null;
+                    if (isset($item['device_id']) && isset($item['display_id'])) {
+                        $device = Device::where('client', $data['client'])
+                            ->where('device_id', $item['device_id'])
+                            ->where('display_id', $item['display_id'])
+                            ->first();
+                    }
+                    
+                    // Get slide info
+                    $slide = null;
+                    if (isset($item['slide_id'])) {
+                        $slide = Slide::where('client', $data['client'])
+                            ->where('slide_id', $item['slide_id'])
+                            ->first();
+                    }
+                    
+                    return [
+                        'client' => $data['client'],
+                        'slide_id' => $item['slide_id'] ?? null,
+                        'slide_name' => $slide ? $slide->name : ($item['slide_name'] ?? null),
+                        'device_id' => $item['device_id'] ?? null,
+                        'display_id' => $item['display_id'] ?? null,
+                        'site_id' => $item['site_id'] ?? null,
+                        'site_name' => $device ? $device->site_name : ($item['site_name'] ?? null),
+                        'duration_seconds' => $item['duration_seconds'] ?? null,
+                        'play_count' => $item['play_count'] ?? null,
+                        'played_at' => isset($item['played_at']) ? $item['played_at'] : null,
+                        'duration' => $item['duration'] ?? null,
+                    ];
                 });
+                
+                // Bulk insert the results
+                ProofOfPlayResult::insert($results->toArray());
+                
+                $this->tableQuery = ProofOfPlayResult::with(['device', 'slide'])->get();
 
                 Notification::make()
                     ->title('Query completed')
@@ -422,7 +484,7 @@ class ProofOfPlayQuery extends Page implements HasTable
 
     protected function getTableQuery()
     {
-        return $this->tableQuery ?? collect([]);
+        return ProofOfPlayResult::all();
     }
 
     public function exportCsv()
@@ -440,37 +502,60 @@ class ProofOfPlayQuery extends Page implements HasTable
         $csv = Writer::createFromString('');
 
         if ($this->currentMode === ProofOfPlayMode::SlidesBySite->value) {
-            $csv->insertOne(['Slide ID', 'Slide Name', 'Duration (seconds)', 'Play Count']);
+            $csv->insertOne(['Slide ID', 'Slide Name', 'Duration (hours)', 'Play Count']);
 
             foreach ($records as $record) {
                 $csv->insertOne([
-                    $record['slide_id'] ?? '',
-                    $record['slide_name'] ?? '',
-                    $record['duration_seconds'] ?? '',
-                    $record['play_count'] ?? '',
+                    $record->slide_id ?? '',
+                    $record->slide_name ?? '',
+                    $record->duration_seconds ? number_format($record->duration_seconds / 3600, 2) : '0.00',
+                    $record->play_count ?? '',
                 ]);
             }
         } elseif ($this->currentMode === ProofOfPlayMode::SitesBySlide->value) {
-            $csv->insertOne(['Device ID', 'Display ID', 'Site ID', 'Duration (seconds)', 'Play Count']);
+            $csv->insertOne(['Device ID', 'Display ID', 'Site Name', 'Duration (hours)', 'Play Count']);
 
             foreach ($records as $record) {
                 $csv->insertOne([
-                    $record['device_id'] ?? '',
-                    $record['display_id'] ?? '',
-                    $record['site_id'] ?? '',
-                    $record['duration_seconds'] ?? '',
-                    $record['play_count'] ?? '',
+                    $record->device_id ?? '',
+                    $record->display_id ?? '',
+                    $record->site_name ?? '',
+                    $record->duration_seconds ? number_format($record->duration_seconds / 3600, 2) : '0.00',
+                    $record->play_count ?? '',
                 ]);
             }
         } else {
-            $csv->insertOne(['Site Name', 'Slide Name', 'Played At', 'Duration']);
+            $csv->insertOne(['Site Name', 'Slide Name', 'Played At', 'Duration (hours)']);
 
             foreach ($records as $record) {
+                $durationHours = '0.00';
+                if ($record->duration) {
+                    // If it's already a formatted string, try to extract hours
+                    if (is_string($record->duration) && !is_numeric($record->duration)) {
+                        // Try to parse formatted duration like "2h 30m 15s"
+                        if (preg_match('/(\d+)h/', $record->duration, $matches)) {
+                            $hours = (int)$matches[1];
+                            if (preg_match('/(\d+)m/', $record->duration, $matches)) {
+                                $hours += $matches[1] / 60;
+                            }
+                            if (preg_match('/(\d+)s/', $record->duration, $matches)) {
+                                $hours += $matches[1] / 3600;
+                            }
+                            $durationHours = number_format($hours, 2);
+                        } else {
+                            $durationHours = $record->duration; // Keep as-is if can't parse
+                        }
+                    } else {
+                        // If it's numeric (seconds), convert to hours
+                        $durationHours = number_format($record->duration / 3600, 2);
+                    }
+                }
+                
                 $csv->insertOne([
-                    $record['site_name'] ?? '',
-                    $record['slide_name'] ?? '',
-                    $record['played_at'] ?? '',
-                    $record['duration'] ?? '',
+                    $record->site_name ?? '',
+                    $record->slide_name ?? '',
+                    $record->played_at ?? '',
+                    $durationHours,
                 ]);
             }
         }
