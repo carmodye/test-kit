@@ -143,13 +143,97 @@ class ProofOfPlayQuery extends Page implements HasTable
                             ->label('Start Date')
                             ->required()
                             ->live()
-                            ->readonly(fn($get) => $get('client')),
+                            ->readonly(fn($get) => $get('client'))
+                            ->afterStateUpdated(function ($state, $set, $get) {
+                                $end = $get('end');
+                                if ($state && $end) {
+                                    // fetch data for dropdown options
+                                    $body = [
+                                        'mode' => 'playedSlides',
+                                        'start' => $state . 'T00:00:00Z',
+                                        'end' => $end . 'T23:59:00Z',
+                                    ];
+                                    Log::info('Making API call for dropdown data with body: ' . json_encode($body));
+                                    Notification::make()
+                                        ->title('API Call Debug')
+                                        ->body('Request body: ' . json_encode($body))
+                                        ->info()
+                                        ->send();
+                                    try {
+                                        $response = Http::withHeaders([
+                                            'authorizationToken' => 'my-secret',
+                                            'x-api-key' => 'my key',
+                                            'Content-Type' => 'application/json',
+                                        ])->post(config('services.api.url') . '/queryv3', $body);
+
+                                        if ($response->successful()) {
+                                            $data = $response->json();
+                                            Log::info('Dropdown data API response successful, data count: ' . count($data));
+                                            $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
+                                                $item['slide_id'] => $item
+                                            ])->all();
+                                            $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
+                                                $item['site_id'] => $item
+                                            ])->all();
+                                            Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
+                                        } else {
+                                            Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
+                                        }
+                                    } catch (\Exception $e) {
+                                        Log::info('Exception fetching dropdown data: ' . $e->getMessage());
+                                    }
+                                    $this->lastStart = $state;
+                                    $this->lastEnd = $end;
+                                }
+                            }),
 
                         Forms\Components\DatePicker::make('end')
                             ->label('End Date')
                             ->required()
                             ->live()
-                            ->readonly(fn($get) => $get('client')),
+                            ->readonly(fn($get) => $get('client'))
+                            ->afterStateUpdated(function ($state, $set, $get) {
+                                $start = $get('start');
+                                if ($start && $state) {
+                                    // fetch data for dropdown options
+                                    $body = [
+                                        'mode' => 'playedSlides',
+                                        'start' => $start . 'T00:00:00Z',
+                                        'end' => $state . 'T23:59:00Z',
+                                    ];
+                                    Log::info('Making API call for dropdown data with body: ' . json_encode($body));
+                                    Notification::make()
+                                        ->title('API Call Debug')
+                                        ->body('Request body: ' . json_encode($body))
+                                        ->info()
+                                        ->send();
+                                    try {
+                                        $response = Http::withHeaders([
+                                            'authorizationToken' => 'my-secret',
+                                            'x-api-key' => 'my key',
+                                            'Content-Type' => 'application/json',
+                                        ])->post(config('services.api.url') . '/queryv3', $body);
+
+                                        if ($response->successful()) {
+                                            $data = $response->json();
+                                            Log::info('Dropdown data API response successful, data count: ' . count($data));
+                                            $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
+                                                $item['slide_id'] => $item
+                                            ])->all();
+                                            $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
+                                                $item['site_id'] => $item
+                                            ])->all();
+                                            Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
+                                        } else {
+                                            Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
+                                        }
+                                    } catch (\Exception $e) {
+                                        Log::info('Exception fetching dropdown data: ' . $e->getMessage());
+                                    }
+                                    $this->lastStart = $start;
+                                    $this->lastEnd = $state;
+                                }
+                            }),
 
                     Forms\Components\Select::make('client')
                         ->label('Client')
@@ -157,16 +241,28 @@ class ProofOfPlayQuery extends Page implements HasTable
                             $user = auth()->user();
                             $options = $user && ($user->hasRole('super_admin') || $user->hasRole('admin')) ? Client::pluck('name', 'name') : ($user ? $user->clients()->pluck('name', 'name') : collect());
 
+                            return $options;
+                        })
+                        ->required()
+                        ->live()
+                        ->visible(fn($get) => $get('start') && $get('end'))
+                        ->afterStateUpdated(function ($state, $set, $get) {
+                            // Ensure allSites is populated when client changes
                             $start = $get('start');
                             $end = $get('end');
                             if ($start && $end && empty($this->allSlides)) {
-                                // fetch data
+                                // fetch data for dropdown options
                                 $body = [
                                     'mode' => 'playedSlides',
                                     'start' => $start . 'T00:00:00Z',
-                                    'end' => $end . 'T00:00:00Z',
+                                    'end' => $end . 'T23:59:00Z',
                                 ];
-                                Log::info('Making API call for data with body: ' . json_encode($body));
+                                Log::info('Making API call for dropdown data on client change with body: ' . json_encode($body));
+                                Notification::make()
+                                    ->title('API Call Debug')
+                                    ->body('Request body: ' . json_encode($body))
+                                    ->info()
+                                    ->send();
                                 try {
                                     $response = Http::withHeaders([
                                         'authorizationToken' => 'my-secret',
@@ -176,7 +272,7 @@ class ProofOfPlayQuery extends Page implements HasTable
 
                                     if ($response->successful()) {
                                         $data = $response->json();
-                                        Log::info('Data API response successful, data count: ' . count($data));
+                                        Log::info('Dropdown data API response successful, data count: ' . count($data));
                                         $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
                                             $item['slide_id'] => $item
                                         ])->all();
@@ -185,20 +281,15 @@ class ProofOfPlayQuery extends Page implements HasTable
                                         ])->all();
                                         Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
                                     } else {
-                                        Log::info('Data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
+                                        Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
                                     }
                                 } catch (\Exception $e) {
-                                    Log::info('Exception fetching data: ' . $e->getMessage());
+                                    Log::info('Exception fetching dropdown data: ' . $e->getMessage());
                                 }
                                 $this->lastStart = $start;
                                 $this->lastEnd = $end;
                             }
-
-                            return $options;
-                        })
-                        ->required()
-                        ->live()
-                        ->visible(fn($get) => $get('start') && $get('end')),
+                        }),
 
                     Forms\Components\Select::make('mode')
                         ->label('Query Mode')
@@ -234,6 +325,7 @@ class ProofOfPlayQuery extends Page implements HasTable
                             $start = $get('start');
                             $end = $get('end');
                             Log::info('Fetching sites options called with client: ' . $client . ', start: ' . $start . ', end: ' . $end);
+                            Log::info('allSites data sample: ' . json_encode(array_slice($this->allSites, 0, 2)));
                             if (!$start || !$end)
                                 return [];
 
@@ -283,6 +375,11 @@ class ProofOfPlayQuery extends Page implements HasTable
         }
 
         Log::info('Making API call for query with body: ' . json_encode($body));
+        Notification::make()
+            ->title('API Call Debug')
+            ->body('Request body: ' . json_encode($body))
+            ->info()
+            ->send();
         try {
             $response = Http::withHeaders([
                 'authorizationToken' => 'my-secret',
