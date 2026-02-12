@@ -12,7 +12,7 @@ class ClientSeeder extends Seeder
      */
     public function run(): void
     {
-        $clients = ['dev1', 'qa2'];
+        $clients = ['dev1', 'qa2', 'rutters'];
 
         foreach ($clients as $clientName) {
             Client::firstOrCreate([
