@@ -20,6 +20,10 @@ use Filament\Support\ArrayRecord;
 use Filament\Actions\Action;
 use BackedEnum;
 use Illuminate\Support\Facades\Log;
+use Filament\Schemas\Components\Wizard;
+use Filament\Schemas\Components\Wizard\Step;
+use Filament\Schemas\Components\Grid;
+use Carbon\Carbon;
 
 class ProofOfPlayQuery extends Page implements HasTable
 {
@@ -55,6 +59,8 @@ class ProofOfPlayQuery extends Page implements HasTable
     public $allSlides = [];
 
     public $allSites = [];
+
+    public $allClients = [];
 
     public function mount(): void
     {
@@ -255,214 +261,216 @@ class ProofOfPlayQuery extends Page implements HasTable
                 ->label('Run Query')
                 ->icon('heroicon-o-play')
                 ->color('primary')
-                ->form([
-                        Forms\Components\DatePicker::make('start')
-                            ->label('Start Date')
-                            ->required()
-                            ->live()
-                            ->readonly(fn($get) => $get('client'))
-                            ->afterStateUpdated(function ($state, $set, $get) {
-                                $end = $get('end');
-                                if ($state && $end) {
-                                    // fetch data for dropdown options
-                                    $body = [
-                                        'mode' => 'playedSlides',
-                                        'start' => $state . 'T00:00:00Z',
-                                        'end' => $end . 'T23:59:00Z',
-                                    ];
-                                    Log::info('Making API call for dropdown data with body: ' . json_encode($body));
-                                    if ($this->shouldShowDebugNotifications()) {
-                                        Notification::make()
-                                            ->title('API Call Debug')
-                                            ->body('Request body: ' . json_encode($body))
-                                            ->info()
-                                            ->send();
-                                    }
-                                    try {
-                                        $response = Http::withHeaders([
-                                            'authorizationToken' => 'my-secret',
-                                            'x-api-key' => 'my key',
-                                            'Content-Type' => 'application/json',
-                                        ])->post(config('services.api.url') . '/queryv3', $body);
+                ->slideOver()
+                ->steps([
+                    Step::make('Date Range')
+                        ->description('Select the start and end dates for your query')
+                        ->icon('heroicon-o-calendar')
+                        ->schema([
+                            Grid::make(2)
+                                ->schema([
+                                    Forms\Components\DatePicker::make('start')
+                                        ->label('Start Date')
+                                        ->required()
+                                        ->native(false)
+                                        ->displayFormat('M d, Y')
+                                        ->maxDate(fn ($get) => $get('end'))
+                                        ->placeholder('Select start date'),
 
-                                        if ($response->successful()) {
-                                            $data = $response->json();
-                                            Log::info('Dropdown data API response successful, data count: ' . count($data));
-                                            $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
-                                                $item['slide_id'] => $item
-                                            ])->all();
-                                            $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
-                                                $item['site_id'] => $item
-                                            ])->all();
-                                            Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
-                                        } else {
-                                            Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
-                                        }
-                                    } catch (\Exception $e) {
-                                        Log::info('Exception fetching dropdown data: ' . $e->getMessage());
-                                    }
-                                    $this->lastStart = $state;
-                                    $this->lastEnd = $end;
-                                }
-                            }),
-
-                        Forms\Components\DatePicker::make('end')
-                            ->label('End Date')
-                            ->required()
-                            ->live()
-                            ->readonly(fn($get) => $get('client'))
-                            ->afterStateUpdated(function ($state, $set, $get) {
-                                $start = $get('start');
-                                if ($start && $state) {
-                                    // fetch data for dropdown options
-                                    $body = [
-                                        'mode' => 'playedSlides',
-                                        'start' => $start . 'T00:00:00Z',
-                                        'end' => $state . 'T23:59:00Z',
-                                    ];
-                                    Log::info('Making API call for dropdown data with body: ' . json_encode($body));
-                                    if ($this->shouldShowDebugNotifications()) {
-                                        Notification::make()
-                                            ->title('API Call Debug')
-                                            ->body('Request body: ' . json_encode($body))
-                                            ->info()
-                                            ->send();
-                                    }
-                                    try {
-                                        $response = Http::withHeaders([
-                                            'authorizationToken' => 'my-secret',
-                                            'x-api-key' => 'my key',
-                                            'Content-Type' => 'application/json',
-                                        ])->post(config('services.api.url') . '/queryv3', $body);
-
-                                        if ($response->successful()) {
-                                            $data = $response->json();
-                                            Log::info('Dropdown data API response successful, data count: ' . count($data));
-                                            $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
-                                                $item['slide_id'] => $item
-                                            ])->all();
-                                            $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
-                                                $item['site_id'] => $item
-                                            ])->all();
-                                            Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
-                                        } else {
-                                            Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
-                                        }
-                                    } catch (\Exception $e) {
-                                        Log::info('Exception fetching dropdown data: ' . $e->getMessage());
-                                    }
-                                    $this->lastStart = $start;
-                                    $this->lastEnd = $state;
-                                }
-                            }),
-
-                    Forms\Components\Select::make('client')
-                        ->label('Client')
-                        ->options(function ($get) {
-                            $user = auth()->user();
-                            $options = $user && ($user->hasRole('super_admin') || $user->hasRole('admin')) ? Client::pluck('name', 'name') : ($user ? $user->clients()->pluck('name', 'name') : collect());
-
-                            return $options;
-                        })
-                        ->required()
-                        ->live()
-                        ->visible(fn($get) => $get('start') && $get('end'))
-                        ->afterStateUpdated(function ($state, $set, $get) {
-                            // Ensure allSites is populated when client changes
+                                    Forms\Components\DatePicker::make('end')
+                                        ->label('End Date')
+                                        ->required()
+                                        ->native(false)
+                                        ->displayFormat('M d, Y')
+                                        ->after('start')
+                                        ->minDate(fn ($get) => $get('start'))
+                                        ->placeholder('Select end date'),
+                                ]),
+                        ])
+                        ->afterValidation(function ($get) {
                             $start = $get('start');
                             $end = $get('end');
-                            if ($start && $end && empty($this->allSlides)) {
-                                // fetch data for dropdown options
-                                $body = [
-                                    'mode' => 'playedSlides',
-                                    'start' => $start . 'T00:00:00Z',
-                                    'end' => $end . 'T23:59:00Z',
-                                ];
-                                Log::info('Making API call for dropdown data on client change with body: ' . json_encode($body));
-                                if ($this->shouldShowDebugNotifications()) {
-                                    Notification::make()
-                                        ->title('API Call Debug')
-                                        ->body('Request body: ' . json_encode($body))
-                                        ->info()
-                                        ->send();
-                                }
-                                try {
-                                    $response = Http::withHeaders([
-                                        'authorizationToken' => 'my-secret',
-                                        'x-api-key' => 'my key',
-                                        'Content-Type' => 'application/json',
-                                    ])->post(config('services.api.url') . '/queryv3', $body);
-
-                                    if ($response->successful()) {
-                                        $data = $response->json();
-                                        Log::info('Dropdown data API response successful, data count: ' . count($data));
-                                        $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(fn($item) => [
-                                            $item['slide_id'] => $item
-                                        ])->all();
-                                        $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
-                                            $item['site_id'] => $item
-                                        ])->all();
-                                        Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites));
-                                    } else {
-                                        Log::info('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
-                                    }
-                                } catch (\Exception $e) {
-                                    Log::info('Exception fetching dropdown data: ' . $e->getMessage());
-                                }
-                                $this->lastStart = $start;
-                                $this->lastEnd = $end;
+                            
+                            Log::info('Step 1 afterValidation triggered - Start: ' . $start . ', End: ' . $end);
+                            
+                            // Safety check - this should never happen due to field validation
+                            if (!$start || !$end || $start >= $end) {
+                                Log::warning('Invalid dates in afterValidation - Start: ' . $start . ', End: ' . $end);
+                                throw new \Filament\Support\Exceptions\Halt();
                             }
+                            
+                            // Clear previous data
+                            $this->allSlides = [];
+                            $this->allSites = [];
+                            $this->allClients = [];
+                            
+                            // Fetch data for dropdown options
+                            $body = [
+                                'mode' => 'playedSlides',
+                                'start' => Carbon::parse($start)->format('Y-m-d') . 'T00:00:00Z',
+                                'end' => Carbon::parse($end)->format('Y-m-d') . 'T23:59:00Z',
+                            ];
+                            Log::info('Making API call for dropdown data with body: ' . json_encode($body));
+                            
+                            Notification::make()
+                                ->title('Fetching Data')
+                                ->body('Loading available options...')
+                                ->info()
+                                ->send();
+                            
+                            if ($this->shouldShowDebugNotifications()) {
+                                Notification::make()
+                                    ->title('API Call Debug')
+                                    ->body('Request body: ' . json_encode($body))
+                                    ->info()
+                                    ->send();
+                            }
+                            
+                            try {
+                                $response = Http::withHeaders([
+                                    'authorizationToken' => 'my-secret',
+                                    'x-api-key' => 'my key',
+                                    'Content-Type' => 'application/json',
+                                ])->post(config('services.api.url') . '/queryv3', $body);
+
+                                if ($response->successful()) {
+                                    $data = $response->json();
+                                    Log::info('Dropdown data API response successful, data count: ' . count($data));
+                                    
+                                    // Enrich slide data with names from database
+                                    $this->allSlides = collect($data)->unique('slide_id')->mapWithKeys(function($item) {
+                                        if (isset($item['slide_id']) && isset($item['client'])) {
+                                            $slide = Slide::where('client', $item['client'])
+                                                ->where('slide_id', $item['slide_id'])
+                                                ->first();
+                                            if ($slide) {
+                                                $item['slide_name'] = $slide->name;
+                                            }
+                                        }
+                                        return [$item['slide_id'] => $item];
+                                    })->all();
+                                    
+                                    $this->allSites = collect($data)->unique('site_id')->mapWithKeys(fn($item) => [
+                                        $item['site_id'] => $item
+                                    ])->all();
+                                    $this->allClients = collect($data)->pluck('client')->unique()->filter()->values()->all();
+                                    Log::info('Fetched slides: ' . count($this->allSlides) . ', sites: ' . count($this->allSites) . ', clients: ' . count($this->allClients));
+                                    
+                                    Notification::make()
+                                        ->title('Data Loaded')
+                                        ->body('Found ' . count($this->allClients) . ' client(s) with data')
+                                        ->success()
+                                        ->send();
+                                } else {
+                                    Log::error('Dropdown data API response failed, status: ' . $response->status() . ', body: ' . $response->body());
+                                    
+                                    Notification::make()
+                                        ->title('Error Loading Data')
+                                        ->body('Failed to fetch data from API (HTTP ' . $response->status() . ')')
+                                        ->danger()
+                                        ->send();
+                                    
+                                    throw new \Filament\Support\Exceptions\Halt();
+                                }
+                            } catch (\Illuminate\Http\Client\RequestException $e) {
+                                Log::error('HTTP exception fetching dropdown data: ' . $e->getMessage());
+                                
+                                Notification::make()
+                                    ->title('Network Error')
+                                    ->body('Failed to connect to API server')
+                                    ->danger()
+                                    ->send();
+                                
+                                throw new \Filament\Support\Exceptions\Halt();
+                            } catch (\Exception $e) {
+                                Log::error('Exception fetching dropdown data: ' . $e->getMessage() . ' | Trace: ' . $e->getTraceAsString());
+                                
+                                Notification::make()
+                                    ->title('Error')
+                                    ->body('An unexpected error occurred: ' . $e->getMessage())
+                                    ->danger()
+                                    ->send();
+                                
+                                throw new \Filament\Support\Exceptions\Halt();
+                            }
+                            
+                            $this->lastStart = $start;
+                            $this->lastEnd = $end;
+                            
+                            Log::info('Step 1 validation completed successfully, proceeding to Step 2');
                         }),
 
-                    Forms\Components\Select::make('mode')
-                        ->label('Query Mode')
-                        ->options(ProofOfPlayMode::options())
-                        ->required()
-                        ->default(ProofOfPlayMode::SitesBySlide->value)
-                        ->live()
-                        ->visible(fn($get) => $get('start') && $get('end') && $get('client')),
+                    Step::make('Client')
+                        ->description('Select the client to query')
+                        ->icon('heroicon-o-building-office-2')
+                        ->schema([
+                            Forms\Components\Select::make('client')
+                                ->label('Client')
+                                ->options(function ($get) {
+                                    // Only show clients if we have API response data
+                                    if (empty($this->allClients)) {
+                                        return collect();
+                                    }
+                                    
+                                    $user = auth()->user();
+                                    // Get user's permitted clients
+                                    $userClients = $user && ($user->hasRole('super_admin') || $user->hasRole('admin')) 
+                                        ? Client::pluck('name', 'name') 
+                                        : ($user ? $user->clients()->pluck('name', 'name') : collect());
+                                    
+                                    // Return only clients that are in API response AND user has permission to see
+                                    return $userClients->filter(function($value, $key) {
+                                        return in_array($key, $this->allClients);
+                                    });
+                                })
+                                ->required()
+                                ->searchable()
+                                ->placeholder('Select a client'),
+                        ]),
 
-                    Forms\Components\Select::make('slideId')
-                        ->label('Slide')
-                        ->options(function ($get) {
-                            $client = $get('client');
-                            $start = $get('start');
-                            $end = $get('end');
-                            if (!$start || !$end)
-                                return [];
+                    Step::make('Query')
+                        ->description('Configure your query parameters')
+                        ->icon('heroicon-o-magnifying-glass')
+                        ->schema([
+                            Forms\Components\Select::make('mode')
+                                ->label('Query Mode')
+                                ->options(ProofOfPlayMode::options())
+                                ->required()
+                                ->default(ProofOfPlayMode::SitesBySlide->value)
+                                ->live()
+                                ->placeholder('Select query mode'),
 
-                            if (!$client)
-                                return [];
-                            return collect($this->allSlides)->where('client', $client)->mapWithKeys(fn($item) => [
-                                $item['slide_id'] => "[{$item['slide_id']}] {$item['slide_name']}"
-                            ])->all();
-                        })
-                        ->searchable()
-                        ->required()
-                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SitesBySlide->value && $get('start') && $get('end') && $get('client')),
+                            Forms\Components\Select::make('slideId')
+                                ->label('Slide')
+                                ->options(function ($get) {
+                                    $client = $get('client');
+                                    if (!$client)
+                                        return [];
+                                    return collect($this->allSlides)->where('client', $client)->mapWithKeys(fn($item) => [
+                                        $item['slide_id'] => "[{$item['slide_id']}] " . ($item['slide_name'] ?? 'Unknown Slide')
+                                    ])->all();
+                                })
+                                ->searchable()
+                                ->required()
+                                ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SitesBySlide->value)
+                                ->placeholder('Select a slide'),
 
-                    Forms\Components\Select::make('siteId')
-                        ->label('Site')
-                        ->options(function ($get) {
-                            $client = $get('client');
-                            $start = $get('start');
-                            $end = $get('end');
-                            Log::info('Fetching sites options called with client: ' . $client . ', start: ' . $start . ', end: ' . $end);
-                            Log::info('allSites data sample: ' . json_encode(array_slice($this->allSites, 0, 2)));
-                            if (!$start || !$end)
-                                return [];
-
-                            if (!$client)
-                                return [];
-                            $filteredSites = collect($this->allSites)->where('client', $client);
-                            Log::info('Filtered sites for client ' . $client . ': ' . $filteredSites->count() . ' sites');
-                            return $filteredSites->mapWithKeys(fn($item) => [
-                                $item['site_id'] => $item['site_id']
-                            ])->all();
-                        })
-                        ->searchable()
-                        ->required()
-                        ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SlidesBySite->value && $get('start') && $get('end') && $get('client')),
+                            Forms\Components\Select::make('siteId')
+                                ->label('Site')
+                                ->options(function ($get) {
+                                    $client = $get('client');
+                                    if (!$client)
+                                        return [];
+                                    $filteredSites = collect($this->allSites)->where('client', $client);
+                                    return $filteredSites->mapWithKeys(fn($item) => [
+                                        $item['site_id'] => $item['site_id']
+                                    ])->all();
+                                })
+                                ->searchable()
+                                ->required()
+                                ->visible(fn($get) => $get('mode') === ProofOfPlayMode::SlidesBySite->value)
+                                ->placeholder('Select a site'),
+                        ]),
                 ])
                 ->action(function (array $data): void {
                     $this->runQuery($data);
@@ -485,8 +493,8 @@ class ProofOfPlayQuery extends Page implements HasTable
         $body = [
             'mode' => $data['mode'],
             'client' => $data['client'],
-            'start' => $data['start'] . 'T00:00:00Z',
-            'end' => $data['end'] . 'T23:59:00Z',
+            'start' => Carbon::parse($data['start'])->format('Y-m-d') . 'T00:00:00Z',
+            'end' => Carbon::parse($data['end'])->format('Y-m-d') . 'T23:59:00Z',
         ];
 
         if ($data['mode'] === ProofOfPlayMode::SitesBySlide->value) {
@@ -498,6 +506,13 @@ class ProofOfPlayQuery extends Page implements HasTable
         }
 
         Log::info('Making API call for query with body: ' . json_encode($body));
+        
+        Notification::make()
+            ->title('Running Query')
+            ->body('Fetching proof of play data...')
+            ->info()
+            ->send();
+        
         if ($this->shouldShowDebugNotifications()) {
             Notification::make()
                 ->title('API Call Debug')
@@ -540,13 +555,13 @@ class ProofOfPlayQuery extends Page implements HasTable
                     return [
                         'client' => $data['client'],
                         'slide_id' => $item['slide_id'] ?? null,
-                        'slide_name' => $slide ? $slide->name : ($item['slide_name'] ?? null),
+                        'slide_name' => $slide ? $slide->name : null,
                         'device_id' => $item['device_id'] ?? null,
                         'display_id' => $item['display_id'] ?? null,
                         'display_name' => $device ? $device->display_name : null,
                         'device_name' => $device ? $device->device_name : null,
                         'site_id' => $item['site_id'] ?? null,
-                        'site_name' => $device ? $device->site_name : ($item['site_name'] ?? null),
+                        'site_name' => $device ? $device->site_name : null,
                         'duration_seconds' => $item['duration_seconds'] ?? null,
                         'play_count' => $item['play_count'] ?? null,
                         'played_at' => isset($item['played_at']) ? $item['played_at'] : null,
@@ -560,16 +575,16 @@ class ProofOfPlayQuery extends Page implements HasTable
                 $this->tableQuery = ProofOfPlayResult::with(['device', 'slide'])->get();
 
                 Notification::make()
-                    ->title('Query completed')
-                    ->body($this->tableQuery->count() . ' records found')
+                    ->title('Query Completed')
+                    ->body('Found ' . $this->tableQuery->count() . ' record(s)')
                     ->success()
                     ->send();
 
                 $this->dispatch('$refresh');
             } else {
                 Notification::make()
-                    ->title('API Error')
-                    ->body('Failed to fetch data from API: ' . $response->status())
+                    ->title('Query Failed')
+                    ->body('Failed to fetch data from API')
                     ->danger()
                     ->send();
 
@@ -577,8 +592,8 @@ class ProofOfPlayQuery extends Page implements HasTable
             }
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Error')
-                ->body('An error occurred: ' . $e->getMessage())
+                ->title('Query Error')
+                ->body('An error occurred while running query')
                 ->danger()
                 ->send();
 
