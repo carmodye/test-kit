@@ -168,6 +168,7 @@ class ProofOfPlayQuery extends Page implements HasTable
         $pdf->loadView('exports.proof-of-play-results', [
             'records' => $records,
             'mode' => $mode,
+            'lastQuery' => $this->lastQuery,
         ]);
         $filename = 'proof-of-play-' . now()->format('Y-m-d_H-i-s') . '.pdf';
         return response()->streamDownload(
@@ -619,7 +620,20 @@ class ProofOfPlayQuery extends Page implements HasTable
             return;
         }
 
-        $csv = Writer::createFromString('');
+        $csv = Writer::createFromString("");
+        // Add query parameters as header rows
+        if ($this->lastQuery) {
+            $csv->insertOne(["Query Parameters"]);
+            $csv->insertOne(["Mode", $this->lastQuery['mode'] === 'sitesBySlide' ? 'Sites by Slide' : 'Slides by Site']);
+            $csv->insertOne(["Client", $this->lastQuery['client'] ?? '']);
+            $csv->insertOne(["Date Range", ($this->lastQuery['start'] ?? '') . ' to ' . ($this->lastQuery['end'] ?? '')]);
+            if (($this->lastQuery['mode'] ?? null) === 'sitesBySlide') {
+                $csv->insertOne(["Slide ID", $this->lastQuery['slideId'] ?? '']);
+            } else {
+                $csv->insertOne(["Site ID", $this->lastQuery['siteId'] ?? '']);
+            }
+            $csv->insertOne([""]); // Empty row
+        }
 
         if ($this->currentMode === ProofOfPlayMode::SlidesBySite->value) {
             $csv->insertOne(['Slide ID', 'Slide Name', 'Duration (hours)', 'Play Count']);
@@ -672,7 +686,6 @@ class ProofOfPlayQuery extends Page implements HasTable
                         $durationHours = number_format($record->duration / 3600, 2);
                     }
                 }
-                
                 $csv->insertOne([
                     $record->site_name ?? '',
                     $record->slide_name ?? '',

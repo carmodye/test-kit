@@ -15,6 +15,21 @@
 </head>
 <body>
     <h2>Proof of Play Results</h2>
+    @if(isset($lastQuery) && $lastQuery)
+        <div style="margin-bottom: 16px; padding: 8px; background: #f5f5f5; border-radius: 6px;">
+            <strong>Query Parameters:</strong>
+            <ul style="margin: 0; padding-left: 18px;">
+                <li><strong>Mode:</strong> {{ $lastQuery['mode'] === 'sitesBySlide' ? 'Sites by Slide' : 'Slides by Site' }}</li>
+                <li><strong>Client:</strong> {{ $lastQuery['client'] ?? '' }}</li>
+                <li><strong>Date Range:</strong> {{ $lastQuery['start'] ?? '' }} to {{ $lastQuery['end'] ?? '' }}</li>
+                @if(($lastQuery['mode'] ?? null) === 'sitesBySlide')
+                    <li><strong>Slide ID:</strong> {{ $lastQuery['slideId'] ?? '' }}</li>
+                @else
+                    <li><strong>Site ID:</strong> {{ $lastQuery['siteId'] ?? '' }}</li>
+                @endif
+            </ul>
+        </div>
+    @endif
     <table>
         <thead>
         <tr>
